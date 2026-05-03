@@ -294,15 +294,14 @@ static int nau7802_setCalibration(const struct device *nau7802,
     @returns 0 if seccess
 */
 /**************************************************************************/
-static int nau7802_IntCalibration(const struct nau7802_loadcell_config *config,
-				  NAU7802_Calibration calibrationMode)
+static int nau7802_IntCalibration(const struct nau7802_loadcell_config *config, NAU7802_Calibration calibrationMode)
 {
 	int ret;
 
-	if (calibrationMode == NULL) {
-		LOG_ERR("Calibration mode couldn't be NULL");
-		return -ENOTSUP;
-	}
+    if ((unsigned)calibrationMode > 3) {
+        LOG_ERR("Invalid calibration mode");
+        return -ENOTSUP;
+    }
 
 	/* Write the calib mode to CTRL2 register*/
 	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_CTRL2, NAU7802_MASK_CTRL2_CALMOD,
@@ -323,7 +322,7 @@ static int nau7802_IntCalibration(const struct nau7802_loadcell_config *config,
 	/* Poll the CALS bit until it became 0*/
 	uint8_t ctrl2_val;
 	ret = i2c_reg_read_byte_dt(&config->bus, NAU7802_CTRL2, &ctrl2_val);
-	while ((ctrl2_val & NAU7802_MASK_CTRL2_CALS != 0) && (ret == 0)) {
+	while (((ctrl2_val & NAU7802_MASK_CTRL2_CALS) != 0) && (ret == 0)) {
 		k_sleep(K_MSEC(10));
 		ret = i2c_reg_read_byte_dt(&config->bus, NAU7802_CTRL2, &ctrl2_val);
 	}
@@ -334,7 +333,7 @@ static int nau7802_IntCalibration(const struct nau7802_loadcell_config *config,
 	LOG_DBG("Internal Calibration done");
 
 	/* Check the CAL_ERR bit in CTRL2 to see if the calibration is successful*/
-	if (ctrl2_val & NAU7802_MASK_CTRL2_CAL_ERR != 0) {
+	if ((ctrl2_val & NAU7802_MASK_CTRL2_CAL_ERR) != 0) {
 		LOG_ERR("Calibration failed.");
 		return -EIO;
 	}
@@ -506,12 +505,13 @@ static int nau7802_loadcell_init(const struct device *dev)
 	data->zero_offset = 0;
 	data->calibration_factor = 1;
 
-	/* Conduct internal calibration*/
-	ret = nau7802_IntCalibration(config, NAU7802_CALMOD_OFFSET);
-	if (ret != 0) {
-		LOG_ERR("ret:%d, Internal Calibration failed", ret);
-		return ret;
-	}
+	/* Conduct internal calibration*/    
+    ret = nau7802_IntCalibration(config, config->calibration_mode);
+    if (ret != 0) {
+        LOG_ERR("ret:%d, Internal Calibration failed", ret);
+        return ret;
+    }
+    
 
 #ifdef CONFIG_NAU7802_LOADCELL_TRIGGER
 	ret = nau7802_loadcell_init_interrupt(dev);
@@ -540,7 +540,9 @@ static int nau7802_loadcell_init(const struct device *dev)
 	static const struct nau7802_loadcell_config nau7802_loadcell_config_##inst = {             \
 		NAU7802_LOADCELL_INT_CFG(inst).bus = I2C_DT_SPEC_INST_GET(inst),                   \
 		.conversions_per_second_idx = DT_INST_ENUM_IDX(inst, conversions_per_second),      \
-		.gain_idx = DT_INST_ENUM_IDX(inst, gain)};                                         \
+		.gain_idx = DT_INST_ENUM_IDX(inst, gain), \
+        .calibration_mode = DT_INST_ENUM_IDX(inst, calibration_mode),    \
+    };                                         \
 	SENSOR_DEVICE_DT_INST_DEFINE(inst, nau7802_loadcell_init, NULL,                            \
 				     &nau7802_loadcell_data_##inst,                                \
 				     &nau7802_loadcell_config_##inst, POST_KERNEL,                 \

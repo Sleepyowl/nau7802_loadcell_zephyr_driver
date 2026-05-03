@@ -56,6 +56,16 @@ properties:
       - 32
       - 64
       - 128
+  calibration-mode:
+    type: string
+    default: "system-offset"
+    description: Calibration mode for NAU7802
+    enum:
+      - "internal-offset"
+      - "internal-gain"
+      - "system-offset"
+      - "system-gain"
+    
   # calibration-factor:
   #   type: string
   #   default: "1.0"

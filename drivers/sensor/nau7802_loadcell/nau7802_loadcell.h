@@ -170,6 +170,7 @@ struct nau7802_loadcell_config {
 	const struct i2c_dt_spec bus;
 	uint16_t conversions_per_second_idx;
 	uint8_t gain_idx;
+    NAU7802_Calibration calibration_mode;
 
 #ifdef CONFIG_NAU7802_LOADCELL_TRIGGER
 	const struct gpio_dt_spec drdy_gpios;
