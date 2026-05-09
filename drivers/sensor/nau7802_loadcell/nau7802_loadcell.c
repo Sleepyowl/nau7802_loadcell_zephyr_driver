@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include "nau7802_loadcell.h"
 
+#include <zephyr/pm/device.h>
+
 /* Register the module to logging submodule*/
 LOG_MODULE_REGISTER(NAU7802_LOADCELL, LOG_LEVEL_DBG);
 // LOG_MODULE_REGISTER(NAU7802_LOADCELL, CONFIG_I2C_LOG_LEVEL);
@@ -527,6 +529,26 @@ static int nau7802_loadcell_init(const struct device *dev)
 	return 0;
 }
 
+static int nau7802_loadcell_pm_action(const struct device *dev, enum pm_device_action action)
+{
+    const struct nau7802_loadcell_config *const config = dev->config;
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		LOG_DBG("PM: suspend");
+		return nau7802_enable(config, false);
+
+	case PM_DEVICE_ACTION_RESUME:
+		LOG_DBG("PM: resume");
+		return nau7802_enable(config, true);
+
+	default:
+		LOG_DBG("PM: unsupported action %d", action);
+		return -ENOTSUP;
+	}
+}
+
+
+
 /* Macro function to selectively include the drdy gpio pin*/
 #if defined(CONFIG_NAU7802_LOADCELL_TRIGGER)
 #define NAU7802_LOADCELL_INT_CFG(inst) .drdy_gpios = GPIO_DT_SPEC_INST_GET(inst, drdy_gpios),
@@ -543,7 +565,9 @@ static int nau7802_loadcell_init(const struct device *dev)
 		.gain_idx = DT_INST_ENUM_IDX(inst, gain), \
         .calibration_mode = DT_INST_ENUM_IDX(inst, calibration_mode),    \
     };                                         \
-	SENSOR_DEVICE_DT_INST_DEFINE(inst, nau7802_loadcell_init, NULL,                            \
+    PM_DEVICE_DT_INST_DEFINE(inst, nau7802_loadcell_pm_action); \
+	SENSOR_DEVICE_DT_INST_DEFINE(inst, nau7802_loadcell_init, \
+                     PM_DEVICE_DT_INST_GET(inst),			  \
 				     &nau7802_loadcell_data_##inst,                                \
 				     &nau7802_loadcell_config_##inst, POST_KERNEL,                 \
 				     CONFIG_SENSOR_INIT_PRIORITY, &nau7802_loadcell_api);
