@@ -24,20 +24,19 @@ static int nau7802_reset(const struct nau7802_loadcell_config *config)
 	int ret;
 	/* Set the RR bit to 1 in R0x00, to guarantee a reset of all register values.*/
 	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL, NAU7802_MASK_PU_CTRL_RR,
-				     (1 << NAU7802_SHIFT_PU_CTRL_RR));
+				     BIT(NAU7802_SHIFT_PU_CTRL_RR));
 	if (ret != 0) {
 		LOG_ERR("ret:%d, Chip reset failed", ret);
 		return ret;
 	}
 	/* Set the RR bit to 0 and PUD bit 1, in R0x00, to enter normal operation*/
-	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL, NAU7802_MASK_PU_CTRL_RR,
-				     (0 << NAU7802_SHIFT_PU_CTRL_RR));
+	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL, NAU7802_MASK_PU_CTRL_RR, 0);
 	if (ret != 0) {
 		LOG_ERR("ret:%d, Chip reset RR bit failed", ret);
 		return ret;
 	}
 	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL, NAU7802_MASK_PU_CTRL_PUD,
-				     (1 << NAU7802_SHIFT_PU_CTRL_PUD));
+				     BIT(NAU7802_SHIFT_PU_CTRL_PUD));
 	if (ret != 0) {
 		LOG_ERR("ret:%d, Chip set PUD bit failed", ret);
 		return ret;
@@ -74,21 +73,12 @@ static int nau7802_enable(const struct nau7802_loadcell_config *config, bool fla
 	int ret;
 	/* Turn off the IC*/
 	if (!flag) {
-		/* Reset the PUA bit*/
+		/* Reset the PUA and PUD bits*/
 		ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL,
-					     NAU7802_MASK_PU_CTRL_PUA,
-					     (0 << NAU7802_SHIFT_PU_CTRL_PUA));
+			NAU7802_MASK_PU_CTRL_PUA | NAU7802_MASK_PU_CTRL_PUD, 0);
+	
 		if (ret != 0) {
-			LOG_ERR("ret:%d, Chip reset PUA bit failed", ret);
-			return ret;
-		}
-
-		/* Reset the PUD bit*/
-		ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL,
-					     NAU7802_MASK_PU_CTRL_PUD,
-					     (0 << NAU7802_SHIFT_PU_CTRL_PUD));
-		if (ret != 0) {
-			LOG_ERR("ret:%d, Chip reset PUD bit failed", ret);
+			LOG_ERR("ret:%d, Chip reset PUA and PUD bits failed", ret);
 			return ret;
 		}
 		/* success*/
@@ -96,27 +86,20 @@ static int nau7802_enable(const struct nau7802_loadcell_config *config, bool fla
 	}
 
 	/* Turn on the IC*/
-	/* Set the PUA bit*/
-	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL, NAU7802_MASK_PU_CTRL_PUA,
-				     (1 << NAU7802_SHIFT_PU_CTRL_PUA));
+	/* Set the PUA and PUD bits*/
+	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL, 
+        NAU7802_MASK_PU_CTRL_PUA | NAU7802_MASK_PU_CTRL_PUD, 
+        BIT(NAU7802_SHIFT_PU_CTRL_PUA) | BIT(NAU7802_SHIFT_PU_CTRL_PUD));
 	if (ret != 0) {
 		LOG_ERR("ret:%d, Chip set PUA bit failed", ret);
 		return ret;
 	}
 
-	/* Set the PUD bit*/
-	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL, NAU7802_MASK_PU_CTRL_PUD,
-				     (1 << NAU7802_SHIFT_PU_CTRL_PUD));
-	if (ret != 0) {
-		LOG_ERR("ret:%d, Chip set PUD bit failed", ret);
-		return ret;
-	}
-
 	/*!
-		RDY: Analog part wakeup stable plus Data Ready after exiting power-down
-		mode 600ms
+	After about 200 microseconds, the PWRUP bit will be Logic=1 indicating the
+	device is ready for the remaining programming setup.
 	*/
-	k_sleep(K_MSEC(600));
+	k_sleep(K_USEC(300));
 
 	uint8_t pu_ctrl_val;
 	ret = i2c_reg_read_byte_dt(&config->bus, NAU7802_PU_CTRL, &pu_ctrl_val);
@@ -129,6 +112,12 @@ static int nau7802_enable(const struct nau7802_loadcell_config *config, bool fla
 		LOG_ERR("Chip is not powered up, PUR bit is 0.");
 		return EIO;
 	}
+
+	/*!
+		RDY: Analog part wakeup stable plus Data Ready after exiting power-down
+		mode 600ms
+	*/
+	k_sleep(K_MSEC(600));
 	/* success*/
 	return 0;
 }
@@ -149,8 +138,7 @@ static int nau7802_setLDO(const struct nau7802_loadcell_config *config, NAU7802_
 	if (voltage == NAU7802_EXTERNAL) {
 		/* Reset the AVDD bit in PU_CTRL register*/
 		ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL,
-					     NAU7802_MASK_PU_CTRL_AVDDS,
-					     (0 << NAU7802_SHIFT_PU_CTRL_AVDDS));
+					     NAU7802_MASK_PU_CTRL_AVDDS, 0);
 		if (ret != 0) {
 			LOG_ERR("ret:%d, Chip reset AVDDS bit failed", ret);
 			return ret;
@@ -162,7 +150,7 @@ static int nau7802_setLDO(const struct nau7802_loadcell_config *config, NAU7802_
 
 	/* Set the AVDD bit in PU_CTRL register*/
 	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PU_CTRL, NAU7802_MASK_PU_CTRL_AVDDS,
-				     (1 << NAU7802_SHIFT_PU_CTRL_AVDDS));
+				     BIT(NAU7802_SHIFT_PU_CTRL_AVDDS));
 	if (ret != 0) {
 		LOG_ERR("ret:%d, Chip set AVDDS bit failed", ret);
 		return ret;
@@ -315,7 +303,7 @@ static int nau7802_IntCalibration(const struct nau7802_loadcell_config *config, 
 
 	/* Set the CALS bit in CTRL2 register to start the calibration*/
 	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_CTRL2, NAU7802_MASK_CTRL2_CALS,
-				     (1 << NAU7802_SHIFT_CTRL2_CALS));
+				     BIT(NAU7802_SHIFT_CTRL2_CALS));
 	if (ret != 0) {
 		LOG_ERR("ret%d, Failed to start the calibration.", ret);
 		return ret;
@@ -487,8 +475,7 @@ static int nau7802_loadcell_init(const struct device *dev)
 		return ret;
 	}
 	/* Use low ESR caps*/
-	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PGA, NAU7802_MASK_PGA_LDOMODE,
-				     (0 << NAU7802_SHIFT_PGA_LDOMODE));
+	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_PGA, NAU7802_MASK_PGA_LDOMODE, 0);
 	if (ret != 0) {
 		LOG_ERR("ret:%d, Setting low ESR failed", ret);
 		return ret;
@@ -496,7 +483,7 @@ static int nau7802_loadcell_init(const struct device *dev)
 
 	/* PGA stabilizer cap on output*/
 	ret = i2c_reg_update_byte_dt(&config->bus, NAU7802_POWER, NAU7802_MASK_POWER_PGA_CAP_EN,
-				     (1 << NAU7802_SHIFT_POWER_PGA_CAP_EN));
+				     BIT(NAU7802_SHIFT_POWER_PGA_CAP_EN));
 	if (ret != 0) {
 		LOG_ERR("ret:%d, Enabling PGA cap failed", ret);
 		return ret;
